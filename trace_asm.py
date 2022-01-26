@@ -52,7 +52,7 @@ class TraceAsm(gdb.Command):
                             if is_main_exe:
                                 last_myexe_line = line
                         pc = frame.pc()
-                        gdb.execute('si', to_string=True)
+                        gdb.execute('s', to_string=True)
                         # if is_main_exe:
                         #     f.write("path {} line {} {} {} {}".format(path, line, hex(pc), frame.architecture().disassemble(pc)[0]['asm'], os.linesep))
                     except Exception as e:
