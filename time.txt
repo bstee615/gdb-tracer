@@ -1,0 +1,35 @@
+Saturday
+Saturday
+Wednesday
+
+real	0m0.011s
+user	0m0.005s
+sys	0m0.000s
+Saturday
+Saturday
+Wednesday
+
+real	0m0.011s
+user	0m0.000s
+sys	0m0.004s
+Saturday
+Saturday
+Wednesday
+
+real	0m0.011s
+user	0m0.005s
+sys	0m0.000s
+Saturday
+Saturday
+Wednesday
+
+real	0m0.011s
+user	0m0.000s
+sys	0m0.005s
+Saturday
+Saturday
+Wednesday
+
+real	0m0.010s
+user	0m0.005s
+sys	0m0.000s
