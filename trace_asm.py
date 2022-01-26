@@ -23,6 +23,7 @@ class TraceAsm(gdb.Command):
             thread = gdb.inferiors()[0].threads()[0]
             last_path = None
             last_line = None
+            last_myexe_line = None
             n_instr = 100000
             with open('trace.tmp', 'w') as f:
                 for i in range(n_instr):
@@ -42,13 +43,18 @@ class TraceAsm(gdb.Command):
                         if path != last_path:
                             # f.write("path {}{}".format(path, os.linesep))
                             last_path = path
+                        is_main_exe = path is not None and path.endswith('test.cpp')
+                        if line != last_myexe_line and is_main_exe:
+                            f.write("path {} line {}{}".format(path, line, os.linesep))
+                            f.write("variables: {}{}".format(gdb.execute('info locals', to_string=True), os.linesep))
                         if line != last_line:
-                            # f.write("path {} line {}{}".format(path, line, os.linesep))
                             last_line = line
+                            if is_main_exe:
+                                last_myexe_line = line
                         pc = frame.pc()
                         gdb.execute('si', to_string=True)
-                        if path is not None and path.endswith('test.cpp'):
-                            f.write("path {} line {} {} {} {}".format(path, line, hex(pc), frame.architecture().disassemble(pc)[0]['asm'], os.linesep))
+                        # if is_main_exe:
+                        #     f.write("path {} line {} {} {} {}".format(path, line, hex(pc), frame.architecture().disassemble(pc)[0]['asm'], os.linesep))
                     except Exception as e:
                         f.write("exception {}{}".format(e, os.linesep))
 def exit_handler(event):
