@@ -7,6 +7,12 @@ then
 else
     exeFile="$1"
     inputFile="$2"
+    loggingArg="$3"
 
-    gdb -batch -nh -x trace.gdb -ex "r < $inputFile" -ex "trace-asm" $exeFile
+    if [ "$loggingArg" = "-log" ]
+    then
+        gdb -batch -nh -x trace.gdb -ex "r < $inputFile" -ex "trace-asm" $exeFile
+    else
+        gdb -batch -nh -x trace.gdb -ex 'set logging file /dev/null' -ex 'set logging redirect on' -ex 'set logging on' -ex "r < $inputFile" -ex "trace-asm" $exeFile
+    fi
 fi
