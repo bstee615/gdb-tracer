@@ -1,0 +1,12 @@
+#!/bin/bash
+
+if [ $# -lt 2 ]
+then
+    echo "Usage: $0 <exe> <input>"
+    exit 1
+else
+    exeFile="$1"
+    inputFile="$2"
+
+    gdb -batch -nh -x trace.gdb -ex "r < $inputFile" -ex "trace-asm" $exeFile
+fi
