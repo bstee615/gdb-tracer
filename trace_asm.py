@@ -1,5 +1,6 @@
 # https://stackoverflow.com/a/46661931/8999671
 import os
+import json
 
 should_stop = False
 
@@ -14,50 +15,53 @@ class TraceAsm(gdb.Command):
         gdb.events.exited.connect(exit_handler)
         global should_stop
         should_stop = False
+        # with open('decl_info.json') as f:
+        #     self.decl_info = json.load(f)
+        self.variable_states = []
     def invoke(self, argument, from_tty):
         argv = gdb.string_to_argv(argument)
         if argv:
             gdb.write('Does not take any arguments.\n')
         else:
-            done = False
-            thread = gdb.inferiors()[0].threads()[0]
-            last_path = None
-            last_line = None
-            last_myexe_line = None
             n_instr = 1000000
             with open('trace.tmp', 'w') as f:
-                for i in range(n_instr):
+                for _ in range(n_instr):
                     if should_stop:
                         f.write("stopped{}".format(os.linesep))
                         break
                     try:
+                        
                         frame = gdb.selected_frame()
                         sal = frame.find_sal()
                         symtab = sal.symtab
+                        path = None
+                        line = None
                         if symtab:
                             path = symtab.fullname()
                             line = sal.line
-                        else:
-                            path = None
-                            line = None
-                        if path != last_path:
-                            # f.write("path {}{}".format(path, os.linesep))
-                            last_path = path
+
                         is_main_exe = path is not None and path.startswith('/workspace')
-                        if line != last_myexe_line and is_main_exe:
-                            f.write("path {} line {}{}".format(path, line, os.linesep))
-                            f.write("variables: {}{}".format(gdb.execute('info locals', to_string=True), os.linesep))
-                        if line != last_line:
-                            last_line = line
-                            if is_main_exe:
-                                last_myexe_line = line
-                        # pc = frame.pc()
-                        # gdb.execute('s', to_string=True)  # This line steps to the next line which reduces overhead, but skips some lines compared to stepi.
-                        gdb.execute('si', to_string=True)
-                        # if is_main_exe:
-                        #     f.write("path {} line {} {} {} {}".format(path, line, hex(pc), frame.architecture().disassemble(pc)[0]['asm'], os.linesep))
+                        if is_main_exe:
+                            block = frame.block()
+                            variables = {}
+                            while block:
+                                for symbol in block:
+                                    if (symbol.is_argument or symbol.is_variable):
+                                        name = symbol.name
+                                        if not name in variables and not name.startswith('std::'):
+                                            value = symbol.value(frame)
+                                            variables[name] = str(value)
+                                block = block.superblock
+                            for name, value in variables.items():
+                                f.write(f'{path}:{line}, {name} = {value}\n')
+                            self.variable_states.append((
+                                path, line, variables
+                            ))
                     except Exception as e:
                         f.write("exception {}{}".format(e, os.linesep))
+                    gdb.execute('s', to_string=True)  # This line steps to the next line which reduces overhead, but skips some lines compared to stepi.
+            with open('trace.json', 'w') as jf:
+                json.dump(self.variable_states, jf, indent=2)
 def exit_handler(event):
     # check the type of stop, the following is the common one after step/next,
     # a more complex one would be a subclass (for example breakpoint or signal)
