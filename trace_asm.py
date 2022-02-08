@@ -1,7 +1,5 @@
 # https://stackoverflow.com/a/46661931/8999671
-import errno
 import os
-import json
 import traceback
 
 should_stop = False
@@ -17,7 +15,6 @@ class TraceAsm(gdb.Command):
         gdb.events.exited.connect(exit_handler)
         global should_stop
         should_stop = False
-        self.variable_states = []
     def invoke(self, argument, from_tty):
         argv = gdb.string_to_argv(argument)
         if argv:
@@ -25,7 +22,8 @@ class TraceAsm(gdb.Command):
         else:
             n_instr = 1000000
             text_offset = 0
-            with open('trace.tmp', 'w') as f:
+            with open('log.xml', 'w') as f:
+                f.write('<trace>\n')
                 for _ in range(n_instr):
                     if should_stop:
                         f.write("stopped{}".format(os.linesep))
@@ -53,12 +51,10 @@ class TraceAsm(gdb.Command):
                                             value = symbol.value(frame)
                                             variables[name] = str(value)
                                 block = block.superblock
+                            f.write(f'<program_point filename="{path}" line="{line}">\n')
                             for name, value in variables.items():
-                                f.write(f'{path}:{line}, {name} = {value}\n')
-                                print(f'{path}:{line}, {name} = {value}')
-                            self.variable_states.append((
-                                path, line, variables
-                            ))
+                                f.write(f'<variable name="{name}">{value}</variable>\n')
+                            f.write('</program_point>\n')
                     except Exception as e:
                         f.write("exception {}{}".format(e, os.linesep))
                         traceback.print_exc()
@@ -70,14 +66,12 @@ class TraceAsm(gdb.Command):
                             text_offset += len(text)
                         if not text:
                             text = None
-                        # os.unlink('tmp.txt')
                     else:
                         text = None
                     if text is not None:
-                        f.write(f'output={text}\n')
+                        f.write(f'<stdout>{text}</stdout>\n')
                     gdb.execute('s', to_string=True)  # This line steps to the next line which reduces overhead, but skips some lines compared to stepi.
-            with open('trace.json', 'w') as jf:
-                json.dump(self.variable_states, jf, indent=2)
+                f.write('</trace>\n')
 def exit_handler(event):
     # check the type of stop, the following is the common one after step/next,
     # a more complex one would be a subclass (for example breakpoint or signal)
