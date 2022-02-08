@@ -1,6 +1,8 @@
 # https://stackoverflow.com/a/46661931/8999671
+import errno
 import os
 import json
+import traceback
 
 should_stop = False
 
@@ -15,8 +17,6 @@ class TraceAsm(gdb.Command):
         gdb.events.exited.connect(exit_handler)
         global should_stop
         should_stop = False
-        # with open('decl_info.json') as f:
-        #     self.decl_info = json.load(f)
         self.variable_states = []
     def invoke(self, argument, from_tty):
         argv = gdb.string_to_argv(argument)
@@ -24,13 +24,13 @@ class TraceAsm(gdb.Command):
             gdb.write('Does not take any arguments.\n')
         else:
             n_instr = 1000000
+            text_offset = 0
             with open('trace.tmp', 'w') as f:
                 for _ in range(n_instr):
                     if should_stop:
                         f.write("stopped{}".format(os.linesep))
                         break
                     try:
-                        
                         frame = gdb.selected_frame()
                         sal = frame.find_sal()
                         symtab = sal.symtab
@@ -42,6 +42,7 @@ class TraceAsm(gdb.Command):
 
                         is_main_exe = path is not None and path.startswith('/workspace')
                         if is_main_exe:
+                            # Navigating scope blocks to gather variables https://stackoverflow.com/a/30032690/8999671
                             block = frame.block()
                             variables = {}
                             while block:
@@ -54,11 +55,26 @@ class TraceAsm(gdb.Command):
                                 block = block.superblock
                             for name, value in variables.items():
                                 f.write(f'{path}:{line}, {name} = {value}\n')
+                                print(f'{path}:{line}, {name} = {value}')
                             self.variable_states.append((
                                 path, line, variables
                             ))
                     except Exception as e:
                         f.write("exception {}{}".format(e, os.linesep))
+                        traceback.print_exc()
+                    # TODO: May want to use named pipes for smarter solution
+                    if os.path.exists('tmp.txt'):
+                        with open('tmp.txt') as inf:
+                            inf.seek(text_offset)
+                            text = inf.read()
+                            text_offset += len(text)
+                        if not text:
+                            text = None
+                        # os.unlink('tmp.txt')
+                    else:
+                        text = None
+                    if text is not None:
+                        f.write(f'output={text}\n')
                     gdb.execute('s', to_string=True)  # This line steps to the next line which reduces overhead, but skips some lines compared to stepi.
             with open('trace.json', 'w') as jf:
                 json.dump(self.variable_states, jf, indent=2)
