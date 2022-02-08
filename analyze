@@ -8,11 +8,25 @@ else
     exeFile="$1"
     inputFile="$2"
     loggingArg="$3"
+    outputFile="$4"
+    if [ -z "$outputFile" ]
+    then
+        outputFile="log.xml"
+    fi
+
+    tmpFile="$(mktemp)"
+
+    echo "$exeFile < $inputFile > $tmpFile"
 
     if [ "$loggingArg" = "-log" ]
     then
-        gdb -batch -nh -x trace.gdb -ex "r < $inputFile > tmp.txt" -ex "trace-asm" $exeFile
+        gdb -batch -nh -x trace.gdb -ex "r < $inputFile > $tmpFile" -ex "trace-asm $tmpFile" $exeFile
     else
-        gdb -batch -nh -x trace.gdb -ex 'set logging file /dev/null' -ex 'set logging redirect on' -ex 'set logging on' -ex "r < $inputFile > tmp.txt" -ex "trace-asm" $exeFile
+        gdb -batch -nh -x trace.gdb -ex 'set logging file /dev/null' -ex 'set logging redirect on' -ex 'set logging on' -ex "r < $inputFile > $tmpFile" -ex "trace-asm $tmpFile" $exeFile
+    fi
+
+    if [ ! -z "$outputFile" ]
+    then
+        cp "${tmpFile}_log" "$outputFile"
     fi
 fi
