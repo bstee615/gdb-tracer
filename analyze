@@ -17,6 +17,7 @@ parser.add_argument("--log_file", help='file to write trace log')
 parser.add_argument("-v", "--verbose", action="store_true")
 parser.add_argument("--keep_tmp", action="store_true")
 parser.add_argument("--infer_output_files", action="store_true")
+parser.add_argument("--timeout", default=10)
 args = parser.parse_args()
 
 if args.infer_output_files:
@@ -103,8 +104,18 @@ try:
 
     if args.verbose:
         print(f'{" ".join(trace_cmd_args)=}')
-    proc = subprocess.run(
-        trace_cmd_args, cwd=tmp_dir, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, encoding='utf-8')
+    try:
+        proc = subprocess.run(
+            trace_cmd_args, cwd=tmp_dir, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, encoding='utf-8',
+            timeout=args.timeout)
+    except subprocess.TimeoutExpired:
+        if args.log_file is not None:
+            with open(args.log_file, 'a') as f:
+                f.write(f'<timeout seconds="{args.timeout}"/>\n')
+                f.write('</trace>\n')
+        if args.verbose:
+            print(f'Process timed out after {args.timeout} seconds')
+        exit(1)
     if args.verbose and proc.stdout:
         print(f'proc.stdout: """' + proc.stdout + '"""')
     if proc.returncode != 0 and args.verbose:

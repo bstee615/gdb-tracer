@@ -1,6 +1,5 @@
 import traceback
 import sys
-import time
 
 should_stop = False
 
@@ -38,9 +37,6 @@ class TraceAsm(gdb.Command):
             f = open(argv[0], 'w')
         else:
             f = sys.stdout
-        
-        timeout_seconds = 5
-        begin = time.time()
 
         try:
             f.write(f'<trace>\n')
@@ -54,10 +50,6 @@ class TraceAsm(gdb.Command):
                     # gdb.execute('n', to_string=True)  # Juuuust right... until we have to step into a function call.
                 else:
                     gdb.execute('finish')
-                end = time.time()
-                if end - begin > timeout_seconds:
-                    f.write('<timeout/>\n')
-                    break
         except Exception:
             traceback.print_exc()
         finally:
@@ -80,6 +72,7 @@ class TraceAsm(gdb.Command):
                     for name, (valid, value) in variables.items():
                         output_file.write(f'<variable name="{name}" valid="{"true" if valid else "false"}">{value}</variable>\n')
                     output_file.write('</program_point>\n')
+                    output_file.flush()
                     return True
         except Exception:
             traceback.print_exc()
