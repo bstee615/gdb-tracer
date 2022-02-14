@@ -5,6 +5,7 @@ import tempfile
 import subprocess
 import argparse
 import os
+import copy
 
 parser = argparse.ArgumentParser()
 parser.add_argument("src_file", help='file to compile and execute')
@@ -15,7 +16,24 @@ parser.add_argument(
 parser.add_argument("--log_file", help='file to write trace log')
 parser.add_argument("-v", "--verbose", action="store_true")
 parser.add_argument("--keep_tmp", action="store_true")
+parser.add_argument("--infer_output_files", action="store_true")
 args = parser.parse_args()
+
+if args.infer_output_files:
+    problem_id = os.path.basename(
+        os.path.dirname(os.path.dirname(args.src_file)))
+    solution_id, _ = os.path.splitext(os.path.basename(args.src_file))
+    lang_id = args.src_file[args.src_file.rfind('.')+1:]
+    if args.verbose:
+        print(f'{problem_id=} {solution_id=}')
+    args.output_file = os.path.join(
+        'outputs', lang_id + '_' + problem_id + '_' + solution_id + '.txt')
+    args.log_file = os.path.join(
+        'logs', lang_id + '_' + problem_id + '_' + solution_id + '.xml')
+    if not os.path.exists('outputs'):
+        os.mkdir('outputs')
+    if not os.path.exists('logs'):
+        os.mkdir('logs')
 
 args.input_file = os.path.abspath(args.input_file)
 if args.output_file is not None:
@@ -26,12 +44,15 @@ if args.log_file is not None:
 src_dir = os.path.abspath(os.path.dirname(__file__))
 init_gdb = os.path.join(src_dir, 'init.gdb')
 trace_script = os.path.join(src_dir, 'trace_asm.py')
-log_dir = os.path.join(src_dir, 'tmp/')
+
 
 if args.verbose:
     print(f'{args=} {init_gdb=}')
 
-tmp_dir = tempfile.mkdtemp(prefix=log_dir)
+compile_envs = copy.deepcopy(os.environ)
+compile_envs["LD_LIBRARY_PATH"] = "/usr/lib/x86_64-linux-gnu/debug/"
+
+tmp_dir = tempfile.mkdtemp()
 try:
     # compile file
     _, src_ext = os.path.splitext(args.src_file)
@@ -51,11 +72,15 @@ try:
         '-o', tmp_path
     ]
     if args.verbose:
-        print(f'{compile_cmd_args=}')
-    compile_output = subprocess.check_output(
-        compile_cmd_args, cwd=tmp_dir, stderr=subprocess.PIPE, encoding='utf-8')
-    if not args.verbose:
-        print(compile_output)
+        print(f'{" ".join(compile_cmd_args)=}')
+    proc = subprocess.run(
+        compile_cmd_args, cwd=tmp_dir, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, encoding='utf-8', env=compile_envs)
+    if args.verbose and proc.stdout:
+        print(f'proc.stdout: """' + proc.stdout + '"""')
+    if proc.returncode != 0:
+        if args.verbose:
+            print(f'Compile exited with code {proc.returncode}')
+        exit(proc.returncode)
 
     # construct and run command
     trace_cmd_args = [
@@ -63,25 +88,28 @@ try:
         '-batch', '-nh',
     ]
 
-    r_cmd = f'r < {args.input_file}'
+    r_cmd = f'start < {args.input_file}'
     if args.output_file is not None:
         r_cmd += f' > {args.output_file}'
     trace_asm_cmd = 'trace-asm'
     if args.log_file is not None:
         trace_asm_cmd += f' {args.log_file}'
     trace_cmd_args += [
-        '-ex', 'b main',
+        '-ex', 'set print finish off',
         '-ex', f'source {trace_script}',
         '-ex', r_cmd,
         '-ex', trace_asm_cmd,
     ]
 
     if args.verbose:
-        print(f'{trace_cmd_args=}')
-    trace_output = subprocess.check_output(
-        trace_cmd_args, cwd=tmp_dir, stderr=subprocess.PIPE, encoding='utf-8')
-    if args.verbose:
-        print(trace_output)
+        print(f'{" ".join(trace_cmd_args)=}')
+    proc = subprocess.run(
+        trace_cmd_args, cwd=tmp_dir, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, encoding='utf-8')
+    if args.verbose and proc.stdout:
+        print(f'proc.stdout: """' + proc.stdout + '"""')
+    if proc.returncode != 0 and args.verbose:
+        print(f'Trace exited with code {proc.returncode}')
+    exit(proc.returncode)
 finally:
     if not args.keep_tmp:
         shutil.rmtree(tmp_dir)

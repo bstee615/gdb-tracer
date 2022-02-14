@@ -1,5 +1,6 @@
 import traceback
 import sys
+import time
 
 should_stop = False
 
@@ -20,7 +21,7 @@ class TraceAsm(gdb.Command):
     def __init__(self):
         super().__init__(
             'trace-asm',
-            gdb.COMMAND_BREAKPOINTS,
+            gdb.COMMAND_RUNNING,
             gdb.COMPLETE_NONE,
             False
         )
@@ -37,19 +38,32 @@ class TraceAsm(gdb.Command):
             f = open(argv[0], 'w')
         else:
             f = sys.stdout
+        
+        timeout_seconds = 60
+        begin = time.time()
 
         try:
             f.write(f'<trace>\n')
             while True:
                 if should_stop:
                     break
-                self.trace_step(f)
-                # gdb.execute('s', to_string=True)  # This line steps to the next line which reduces overhead, but skips some lines compared to stepi.
-                # gdb.execute('si', to_string=True)  # Too slow
-                gdb.execute('n', to_string=True)  # Juuuust right... until we have to step into a function call.
-            f.write('</trace>\n')
+                succeeded = self.trace_step(f)
+                if succeeded:
+                    gdb.execute('s', to_string=True)  # This line steps to the next line which reduces overhead, but skips some lines compared to stepi.
+                    # gdb.execute('si', to_string=True)  # Too slow
+                    # gdb.execute('n', to_string=True)  # Juuuust right... until we have to step into a function call.
+                else:
+                    gdb.execute('finish')
+                end = time.time()
+                if end - begin > timeout_seconds:
+                    f.write('<timeout/>\n')
+                    break
+        except Exception:
+            traceback.print_exc()
         finally:
-            f.close()
+            f.write('</trace>\n')
+            if len(argv) > 0:
+                f.close()
 
     def trace_step(self, output_file):
         try:
@@ -59,15 +73,17 @@ class TraceAsm(gdb.Command):
             if symtab:
                 path = symtab.fullname()
                 line = sal.line
-                is_main_exe = path is not None and path.startswith('/workspace')
+                is_main_exe = path is not None and (path.startswith('/workspace') or path.startswith('/tmp'))
                 if is_main_exe:
                     variables = self.gather_vars(frame)
                     output_file.write(f'<program_point filename="{path}" line="{line}">\n')
                     for name, (valid, value) in variables.items():
                         output_file.write(f'<variable name="{name}" valid="{"true" if valid else "false"}">{value}</variable>\n')
                     output_file.write('</program_point>\n')
+                    return True
         except Exception:
             traceback.print_exc()
+        return False
     
     def gather_vars(self, frame):
         """
