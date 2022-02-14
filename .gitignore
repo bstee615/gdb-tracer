@@ -3,6 +3,8 @@
 /test
 !/test/
 /test/test
+/test/output.txt
+/test/log.xml
 /logs
 /log.xml
 /mini_Project_CodeNet
