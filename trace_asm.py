@@ -22,7 +22,7 @@ class TraceAsm(gdb.Command):
         n_instr = 1000000
         text_offset = 0
         with open(argv[0] + '_log', 'w') as f:
-            f.write('<trace>\n')
+            f.write(f'<trace>\n')
             for _ in range(n_instr):
                 if should_stop:
                     break

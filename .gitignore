@@ -1,6 +1,8 @@
-*.tmp
-*.txt
-test
-logs
-log.xml
-mini_Project_CodeNet
+/*.tmp
+/*.txt
+/test
+!/test/
+/test/test
+/logs
+/log.xml
+/mini_Project_CodeNet
