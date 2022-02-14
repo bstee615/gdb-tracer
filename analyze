@@ -11,14 +11,15 @@ parser.add_argument("src_file", help='file to compile and execute')
 parser.add_argument(
     "input_file", help='file from which to redirect program output')
 parser.add_argument(
-    "output_file", help='file to write program output')
-parser.add_argument("log_file", nargs='?', help='file to write trace log')
+    "--output_file", help='file to write program output')
+parser.add_argument("--log_file", help='file to write trace log')
 parser.add_argument("-v", "--verbose", action="store_true")
 parser.add_argument("--keep_tmp", action="store_true")
 args = parser.parse_args()
 
 args.input_file = os.path.abspath(args.input_file)
-args.output_file = os.path.abspath(args.output_file)
+if args.output_file is not None:
+    args.output_file = os.path.abspath(args.output_file)
 if args.log_file is not None:
     args.log_file = os.path.abspath(args.log_file)
 
@@ -61,22 +62,22 @@ try:
         'gdb', tmp_path,
         '-batch', '-nh',
     ]
+
+    r_cmd = f'r < {args.input_file}'
+    if args.output_file is not None:
+        r_cmd += f' > {args.output_file}'
+    trace_asm_cmd = 'trace-asm'
+    if args.log_file is not None:
+        trace_asm_cmd += f' {args.log_file}'
     trace_cmd_args += [
         '-ex', 'b main',
         '-ex', f'source {trace_script}',
-        '-ex', f'r < {args.input_file} > {args.output_file}',
+        '-ex', r_cmd,
+        '-ex', trace_asm_cmd,
     ]
-    if args.log_file is not None:
-        trace_cmd_args += [
-            '-ex', f'trace-asm {args.log_file}',
-        ]
-    else:
-        trace_cmd_args += [
-            '-ex', f'trace-asm',
-        ]
 
     if args.verbose:
-        print(f'{" ".join(trace_cmd_args)=}')
+        print(f'{trace_cmd_args=}')
     trace_output = subprocess.check_output(
         trace_cmd_args, cwd=tmp_dir, stderr=subprocess.PIPE, encoding='utf-8')
     if args.verbose:
