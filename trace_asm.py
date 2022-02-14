@@ -39,7 +39,7 @@ class TraceAsm(gdb.Command):
         else:
             f = sys.stdout
         
-        timeout_seconds = 60
+        timeout_seconds = 5
         begin = time.time()
 
         try:
