@@ -64,7 +64,8 @@ def main(args):
         ]
 
         if args.verbose:
-            print(f'{" ".join(trace_cmd_args)=}')
+            trace_cmd_args_str = ' '.join(['"' + a + '"' if any(c.isspace() for c in a) else a for a in trace_cmd_args])
+            print(f'{trace_cmd_args_str=}')
         try:
             proc = subprocess.run(
                 trace_cmd_args, cwd=tmp_dir, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, encoding='utf-8',
