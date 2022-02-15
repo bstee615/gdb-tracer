@@ -31,8 +31,6 @@ class TraceAsm(gdb.Command):
 
     def invoke(self, argument, _):
         argv = gdb.string_to_argv(argument)
-
-        print(argv)
         
         if len(argv) > 0:
             f = open(argv[0], 'w')
@@ -52,16 +50,11 @@ class TraceAsm(gdb.Command):
                     line = sal.line
                     is_main_exe = path is not None and (path.startswith('/workspace') or path.startswith('/tmp'))
                     if is_main_exe:
-                        variables = self.gather_vars(frame)
                         f.write(f'<program_point filename="{path}" line="{line}">\n')
-                        for name, (age, value) in variables.items():
-                            f.write(f'<variable name="{name}" type="{age}">{value}</variable>\n')
-                        self.frame_to_vars[str(frame)] = variables
+                        self.log_vars(frame, f)
                         f.write('</program_point>\n')
                         f.flush()
-                        gdb.execute('s', to_string=True)  # This line steps to the next line which reduces overhead, but skips some lines compared to stepi.
-                        # gdb.execute('si', to_string=True)  # Too slow
-                        # gdb.execute('n', to_string=True)  # Juuuust right... until we have to step into a function call.
+                        gdb.execute('s')  # This line steps to the next line which reduces overhead, but skips some lines compared to stepi.
                     else:
                         gdb.execute('finish')
         except Exception:
@@ -71,7 +64,7 @@ class TraceAsm(gdb.Command):
             if len(argv) > 0:
                 f.close()
     
-    def gather_vars(self, frame):
+    def log_vars(self, frame, f):
         """
         Navigating scope blocks to gather variables.
         Source: https://stackoverflow.com/a/30032690/8999671
@@ -83,20 +76,37 @@ class TraceAsm(gdb.Command):
                 if (symbol.is_argument or symbol.is_variable):
                     name = symbol.name
                     if not name in variables and not name.startswith('std::'):
+                        proxy = None
                         value = str(symbol.value(frame))
+                        if symbol.type.name == 'std::stringstream':
+                            proxy = "std::stringstream::str()"
+                            command = f'printf "\\"%s\\"", {symbol.name}.str().c_str()'
+                            
+                            try:
+                                value = gdb.execute(command, to_string=True)
+                                value_lines = value.splitlines(keepends=True)
+                                value = ''.join(l for l in value_lines if not l.startswith('warning:'))
+                            except gdb.error:
+                                value = '<error>'
+
                         age = 'new'
                         old_vars = self.frame_to_vars.get(str(frame), {})
                         if name in old_vars:
                             age = 'modified'
                             if old_vars[name][1] == value:
                                 age = 'old'
+
                         value = (value
                             .replace('&', '&amp;')
                             .replace('<', '&lt;')
                             .replace('>', '&gt;')
                             )
-                        variables[name] = (age, value)
+                        
+                        proxy_str = ""
+                        if proxy:
+                            proxy_str = f' proxy="{proxy}"'
+                        f.write(f'<variable name="{name}" type="{age}"{proxy_str}>{value}</variable>\n')
             block = block.superblock
-        return variables
+        self.frame_to_vars[str(frame)] = variables
 
 TraceAsm()
