@@ -89,23 +89,26 @@ class TraceAsm(gdb.Command):
                             except gdb.error:
                                 value = '<error>'
 
-                        age = 'new'
-                        old_vars = self.frame_to_vars.get(str(frame), {})
-                        if name in old_vars:
-                            age = 'modified'
-                            if old_vars[name][1] == value:
-                                age = 'old'
-
                         value = (value
                             .replace('&', '&amp;')
                             .replace('<', '&lt;')
                             .replace('>', '&gt;')
                             )
+
+                        age = 'new'
+                        old_vars = self.frame_to_vars.get(str(frame), {})
+                        if name in old_vars:
+                            print(name, old_vars[name], value)
+                            if old_vars[name] == value:
+                                age = 'old'
+                            else:
+                                age = 'modified'
                         
                         proxy_str = ""
                         if proxy:
                             proxy_str = f' proxy="{proxy}"'
                         f.write(f'<variable name="{name}" type="{age}"{proxy_str}>{value}</variable>\n')
+                        variables[name] = value
             block = block.superblock
         self.frame_to_vars[str(frame)] = variables
 
