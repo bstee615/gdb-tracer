@@ -107,7 +107,7 @@ class TraceAsm(gdb.Command):
                         proxy_str = ""
                         if proxy:
                             proxy_str = f' proxy="{proxy}"'
-                        f.write(f'<variable name="{name}" type="{age}"{proxy_str}>{value}</variable>\n')
+                        f.write(f'<variable name="{name}" age="{age}"{proxy_str}>{value}</variable>\n')
                         variables[name] = value
             block = block.superblock
         self.frame_to_vars[str(frame)] = variables
