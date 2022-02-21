@@ -108,7 +108,6 @@ class TraceAsm(gdb.Command):
                 if symbol.type.name.startswith('std::vector<std::string') or symbol.type.name.startswith('std::vector<std::basic_string'):
                     try:
                         length = int(gdb.execute(f'printf "%d", {symbol.name}.size()', to_string=True))
-                        print(f'vector length: {length}')
                         try_value = '{'
                         for i in range(length):
                             if i > 0:
@@ -116,7 +115,6 @@ class TraceAsm(gdb.Command):
                             add_try_value = gdb.execute(f'printf "%s", {symbol.name}[{i}].c_str()', to_string=True)
                             if add_try_value != '(null)':
                                 add_try_value = '"' + add_try_value + '"'
-                            print(f'vector element {i}: {add_try_value}')
                             try_value += add_try_value
                         try_value += '}'
                         value = try_value
@@ -153,7 +151,6 @@ class TraceAsm(gdb.Command):
                         age = 'new'
                         old_vars = self.frame_to_vars.get(str(frame), {})
                         if name in old_vars:
-                            #print(name, old_vars[name], value)
                             if old_vars[name] == value:
                                 age = 'old'
                             else:
