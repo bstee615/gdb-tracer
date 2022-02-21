@@ -81,7 +81,9 @@ class TraceAsm(gdb.Command):
     def get_repr(self, frame, symbol):
         proxy = None
         value = str(symbol.value(frame))
-        print(symbol.type.name)
+        errored = False
+        if symbol.type.name is None:
+            return proxy, value, errored
         if symbol.type.name == 'std::stringstream':
             proxy = "std::stringstream::str()"
             command = f'printf "\\"%s\\"", {symbol.name}.str().c_str()'
@@ -90,8 +92,9 @@ class TraceAsm(gdb.Command):
                 value = gdb.execute(command, to_string=True)
                 value_lines = value.splitlines(keepends=True)
                 value = ''.join(l for l in value_lines if not l.startswith('warning:'))
-            except gdb.error:
-                value = '<error>'
+            except gdb.error as e:
+                value = f'error: {e}'
+                errored = True
         if symbol.type.name == 'std::string':
             proxy = "std::string::c_str()"
             command = f'printf "\\"%s\\"", {symbol.name}.c_str()'
@@ -100,11 +103,13 @@ class TraceAsm(gdb.Command):
                 value = gdb.execute(command, to_string=True)
                 value_lines = value.splitlines(keepends=True)
                 value = ''.join(l for l in value_lines if not l.startswith('warning:'))
-            except gdb.error:
-                value = '<error>'
+            except gdb.error as e:
+                value = f'error: {e}'
         if symbol.type.name.startswith('std::vector<'):
             proxy = "std::vector::str()"
             try:
+                value = gdb.execute(f'print *(&{symbol.name}[0])@{symbol.name}.size()', to_string=True)
+                value = re.sub(r'\$[0-9]+ = (.*)\n', r'\1', value)
                 if symbol.type.name.startswith('std::vector<std::string') or symbol.type.name.startswith('std::vector<std::basic_string'):
                     try:
                         length = int(gdb.execute(f'printf "%d", {symbol.name}.size()', to_string=True))
@@ -118,14 +123,20 @@ class TraceAsm(gdb.Command):
                             try_value += add_try_value
                         try_value += '}'
                         value = try_value
-                    except gdb.error as e:
+                    except gdb.error:
                         pass
-                else:
-                    value = gdb.execute(f'print *({symbol.name}._M_impl._M_start)@{symbol.name}.size()', to_string=True)
-                    value = re.sub(r'\$[0-9]+ = (.*)\n', r'\1', value)
-            except gdb.error:
-                value = '<error>'
-        return proxy, value
+            except gdb.error as e:
+                # The error "may be inlined" can happen when a template method is called without being instantiated
+                # https://stackoverflow.com/a/40179152/8999671
+                value = f'error: {e}'
+                errored = True
+                try:
+                    value = gdb.execute(f'p {symbol.name}', to_string=True)
+                    errored = False
+                except gdb.error as e:
+                    value = f'error: {e}'
+                    errored = True
+        return proxy, value, errored
         
 
     def log_vars(self, frame, f):
@@ -140,7 +151,7 @@ class TraceAsm(gdb.Command):
                 if (symbol.is_argument or symbol.is_variable):
                     name = symbol.name
                     if not name in variables and not name.startswith('std::'):
-                        proxy, value = self.get_repr(frame, symbol)
+                        proxy, value, errored = self.get_repr(frame, symbol)
 
                         value = (value
                             .replace('&', '&amp;')
@@ -159,7 +170,10 @@ class TraceAsm(gdb.Command):
                         proxy_str = ""
                         if proxy:
                             proxy_str = f' proxy="{proxy}"'
-                        f.write(f'<variable name="{name}" age="{age}"{proxy_str}>{value}</variable>\n')
+                        errored_str = ""
+                        if errored:
+                            errored_str = " errored=\"true\""
+                        f.write(f'<variable name="{name}" age="{age}"{proxy_str}{errored_str}>{value}</variable>\n')
                         variables[name] = value
             block = block.superblock
         self.frame_to_vars[str(frame)] = variables
