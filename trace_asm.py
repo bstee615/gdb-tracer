@@ -1,5 +1,6 @@
 import traceback
 import sys
+import re
 
 should_stop = False
 
@@ -36,34 +37,99 @@ class TraceAsm(gdb.Command):
             f = open(argv[0], 'w')
         else:
             f = sys.stdout
+        if len(argv) > 1 and argv[1] == '-v':
+            verbose = True
+        else:
+            verbose = False
 
         try:
             f.write(f'<trace>\n')
+            i = 0
             while True:
                 if should_stop:
                     break
                 frame = gdb.selected_frame()
                 sal = frame.find_sal()
                 symtab = sal.symtab
+                # TODO if not symtab, then detect __libc_start_main and finish
                 if symtab:
                     path = symtab.fullname()
                     line = sal.line
-                    is_main_exe = path is not None and (path.startswith('/workspace') or path.startswith('/tmp'))
+                    is_main_exe = path is not None and (path.startswith('/workspace') or path.startswith('/tmp') or path.startswith('/scratch'))
                     if is_main_exe:
                         f.write(f'<program_point filename="{path}" line="{line}">\n')
                         self.log_vars(frame, f)
                         f.write('</program_point>\n')
                         f.flush()
+                        if verbose: print(f'iter {i} - step')
                         gdb.execute('s')  # This line steps to the next line which reduces overhead, but skips some lines compared to stepi.
                     else:
-                        gdb.execute('finish')
+                        if verbose: print(f'iter {i} - not main exe - next')
+                        gdb.execute('n')
+                else:
+                    if verbose: print(f'iter {i} - symtab is None - next')
+                    gdb.execute('n')
+                i += 1
         except Exception:
+            print('Error while tracing')
             traceback.print_exc()
         finally:
             f.write('</trace>\n')
             if len(argv) > 0:
                 f.close()
     
+    def get_repr(self, frame, symbol):
+        proxy = None
+        value = str(symbol.value(frame))
+        print(symbol.type.name)
+        if symbol.type.name == 'std::stringstream':
+            proxy = "std::stringstream::str()"
+            command = f'printf "\\"%s\\"", {symbol.name}.str().c_str()'
+                            
+            try:
+                value = gdb.execute(command, to_string=True)
+                value_lines = value.splitlines(keepends=True)
+                value = ''.join(l for l in value_lines if not l.startswith('warning:'))
+            except gdb.error:
+                value = '<error>'
+        if symbol.type.name == 'std::string':
+            proxy = "std::string::c_str()"
+            command = f'printf "\\"%s\\"", {symbol.name}.c_str()'
+                            
+            try:
+                value = gdb.execute(command, to_string=True)
+                value_lines = value.splitlines(keepends=True)
+                value = ''.join(l for l in value_lines if not l.startswith('warning:'))
+            except gdb.error:
+                value = '<error>'
+        if symbol.type.name.startswith('std::vector<'):
+            proxy = "std::vector::str()"
+            try:
+                if symbol.type.name.startswith('std::vector<std::string') or symbol.type.name.startswith('std::vector<std::basic_string'):
+                    try:
+                        length = int(gdb.execute(f'printf "%d", {symbol.name}.size()', to_string=True))
+                        print(f'vector length: {length}')
+                        try_value = '{'
+                        for i in range(length):
+                            if i > 0:
+                                try_value += ', '
+                            add_try_value = gdb.execute(f'printf "%s", {symbol.name}[{i}].c_str()', to_string=True)
+                            if add_try_value != '(null)':
+                                add_try_value = '"' + add_try_value + '"'
+                            print(f'vector element {i}: {add_try_value}')
+                            try_value += add_try_value
+                        try_value += '}'
+                        value = try_value
+                    except gdb.error as e:
+                        pass
+                else:
+                    value = gdb.execute(f'print *({symbol.name}._M_impl._M_start)@{symbol.name}.size()', to_string=True)
+                    value = re.sub(r'\$[0-9]+ = (.*)\n', r'\1', value)
+            except gdb.error:
+                value = '<error>'
+        return proxy, value
+        
+
     def log_vars(self, frame, f):
         """
         Navigating scope blocks to gather variables.
@@ -76,18 +142,7 @@ class TraceAsm(gdb.Command):
                 if (symbol.is_argument or symbol.is_variable):
                     name = symbol.name
                     if not name in variables and not name.startswith('std::'):
-                        proxy = None
-                        value = str(symbol.value(frame))
-                        if symbol.type.name == 'std::stringstream':
-                            proxy = "std::stringstream::str()"
-                            command = f'printf "\\"%s\\"", {symbol.name}.str().c_str()'
-                            
-                            try:
-                                value = gdb.execute(command, to_string=True)
-                                value_lines = value.splitlines(keepends=True)
-                                value = ''.join(l for l in value_lines if not l.startswith('warning:'))
-                            except gdb.error:
-                                value = '<error>'
+                        proxy, value = self.get_repr(frame, symbol)
 
                         value = (value
                             .replace('&', '&amp;')
@@ -98,7 +153,7 @@ class TraceAsm(gdb.Command):
                         age = 'new'
                         old_vars = self.frame_to_vars.get(str(frame), {})
                         if name in old_vars:
-                            print(name, old_vars[name], value)
+                            #print(name, old_vars[name], value)
                             if old_vars[name] == value:
                                 age = 'old'
                             else:
