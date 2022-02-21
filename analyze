@@ -1,4 +1,4 @@
-#!/usr/bin/python3
+#!/usr/bin/env python3
 
 import shutil
 import tempfile
@@ -35,10 +35,12 @@ def main(args):
         ]
         if args.verbose:
             print(f'{" ".join(compile_cmd_args)=}')
-        proc = subprocess.run(
+        proc = subprocess.Popen(
             compile_cmd_args, cwd=tmp_dir, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, encoding='utf-8', env=compile_envs)
-        if args.verbose and proc.stdout:
-            print(f'proc.stdout: """' + proc.stdout + '"""')
+        stdout = proc.communicate()[0]
+        if args.verbose:
+            print('proc.stdout:')
+            print(stdout)
         if proc.returncode != 0:
             if args.verbose:
                 print(f'Compile exited with code {proc.returncode}')
@@ -55,9 +57,8 @@ def main(args):
             r_cmd += f' > {args.output_file}'
         trace_asm_cmd = 'trace-asm'
         if args.log_file is not None:
-            trace_asm_cmd += f' {args.log_file}'
+            trace_asm_cmd += f' {args.log_file} {"-v" if args.verbose else ""}'
         trace_cmd_args += [
-            '-ex', 'set print finish off',
             '-ex', f'source {trace_script}',
             '-ex', r_cmd,
             '-ex', trace_asm_cmd,
@@ -66,10 +67,10 @@ def main(args):
         if args.verbose:
             trace_cmd_args_str = ' '.join(['"' + a + '"' if any(c.isspace() for c in a) else a for a in trace_cmd_args])
             print(f'{trace_cmd_args_str=}')
+        proc = subprocess.Popen(
+            trace_cmd_args, cwd=tmp_dir, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, encoding='utf-8')
         try:
-            proc = subprocess.run(
-                trace_cmd_args, cwd=tmp_dir, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, encoding='utf-8',
-                timeout=args.timeout)
+            stdout = proc.communicate(timeout=args.timeout)[0]
         except subprocess.TimeoutExpired:
             if args.log_file is not None:
                 with open(args.log_file, 'a') as f:
@@ -77,9 +78,15 @@ def main(args):
                     f.write('</trace>\n')
             if args.verbose:
                 print(f'Process timed out after {args.timeout} seconds')
+            if args.verbose:
+                proc.kill()
+                stdout = proc.communicate()[0]
+                print('(timed out) process stdout:')
+                print(stdout)
             return (1)
-        if args.verbose and proc.stdout:
-            print(f'proc.stdout: """' + proc.stdout + '"""')
+        if args.verbose:
+            print('process stdout:')
+            print(stdout)
         if proc.returncode != 0 and args.verbose:
             print(f'Trace exited with code {proc.returncode}')
         return (proc.returncode)
@@ -99,14 +106,15 @@ if __name__ == '__main__':
     parser.add_argument("-v", "--verbose", action="store_true")
     parser.add_argument("--keep_tmp", action="store_true")
     parser.add_argument("--infer_output_files", action="store_true")
-    parser.add_argument("--timeout", default=10)
+    parser.add_argument("--timeout", default=10, type=int)
     args = parser.parse_args()
 
     problem_id = os.path.basename(
         os.path.dirname(os.path.dirname(args.src_file)))
     solution_id, _ = os.path.splitext(os.path.basename(args.src_file))
     lang_id = args.src_file[args.src_file.rfind('.')+1:]
-    run_id = lang_id + '_' + problem_id + '_' + solution_id
+    input_id, _ = os.path.splitext(os.path.basename(args.input_file))
+    run_id = lang_id + '_' + problem_id + '_' + solution_id + '_' + input_id
 
     begin = datetime.now()
     if args.verbose:
@@ -145,6 +153,5 @@ if __name__ == '__main__':
     if args.verbose:
         print(f'{run_id} end: {end.isoformat()}')
         print(f'{run_id} elapsed seconds: {elapsed.total_seconds()}')
-
-    print(f'{run_id} exit code: {return_code}')
+        print(f'{run_id} exit code: {return_code}')
     exit(return_code)
