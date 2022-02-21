@@ -29,7 +29,7 @@ def main(args):
         tmp_file = shutil.copyfile(args.src_file, tmp_file)
         tmp_path, _ = os.path.splitext(tmp_file)
         compile_cmd_args = [
-            cc, '-g',
+            cc, '-g', '-O0', '-fno-inline-functions',
             tmp_file,
             '-o', tmp_path
         ]
