@@ -90,7 +90,7 @@ def main(args):
                 stdout = proc.communicate()[0]
                 print('(timed out) process stdout:')
                 print(stdout)
-            return (1)
+            return 124  # Same exit code as timeout(1) command on Linux
         if args.verbose:
             print('process stdout:')
             print(stdout)
