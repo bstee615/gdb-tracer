@@ -85,7 +85,7 @@ class TraceAsm(gdb.Command):
         if symbol.type.name is None:
             return proxy, value, errored
         if symbol.type.name == 'std::stringstream':
-            proxy = "std::stringstream::str()"
+            proxy = symbol.type.name
             command = f'printf "\\"%s\\"", {symbol.name}.str().c_str()'
                             
             try:
@@ -96,7 +96,7 @@ class TraceAsm(gdb.Command):
                 value = f'error: {e}'
                 errored = True
         if symbol.type.name == 'std::string':
-            proxy = "std::string::c_str()"
+            proxy = symbol.type.name
             command = f'printf "\\"%s\\"", {symbol.name}.c_str()'
                             
             try:
@@ -106,7 +106,7 @@ class TraceAsm(gdb.Command):
             except gdb.error as e:
                 value = f'error: {e}'
         if symbol.type.name.startswith('std::vector<'):
-            proxy = "std::vector::str()"
+            proxy = symbol.type.name
             try:
                 value = gdb.execute(f'print *(&{symbol.name}[0])@{symbol.name}.size()', to_string=True)
                 value = re.sub(r'\$[0-9]+ = (.*)\n', r'\1', value)
