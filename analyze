@@ -14,38 +14,44 @@ def main(args):
     compile_envs = copy.deepcopy(os.environ)
     compile_envs["LD_LIBRARY_PATH"] = "/usr/lib/x86_64-linux-gnu/debug/"
 
-    tmp_dir = tempfile.mkdtemp()
-    try:
-        # compile file
-        _, src_ext = os.path.splitext(args.src_file)
-        if src_ext == '.c':
-            cc = 'gcc'
-        elif src_ext == '.cpp':
-            cc = 'g++'
-        else:
-            raise NotImplementedError(f'source file extension {src_ext}')
+    tmp_dir = None
 
-        tmp_file = os.path.join(tmp_dir, 'main' + src_ext)
-        tmp_file = shutil.copyfile(args.src_file, tmp_file)
-        tmp_path, _ = os.path.splitext(tmp_file)
-        compile_cmd_args = [
-            cc, '-g', '-O0', '-fno-inline-functions',
-            tmp_file,
-            '-o', tmp_path
-        ]
-        if args.verbose:
-            compile_cmd_args_str = " ".join(compile_cmd_args)
-            print(f'{compile_cmd_args_str=}')
-        proc = subprocess.Popen(
-            compile_cmd_args, cwd=tmp_dir, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, encoding='utf-8', env=compile_envs)
-        stdout = proc.communicate()[0]
-        if args.verbose:
-            print('proc.stdout:')
-            print(stdout)
-        if proc.returncode != 0:
+    try:
+        if compile:
+            tmp_dir = tempfile.mkdtemp()
+            # compile file
+            _, src_ext = os.path.splitext(args.src_file)
+            if src_ext == '.c':
+                cc = 'gcc'
+            elif src_ext == '.cpp':
+                cc = 'g++'
+            else:
+                raise NotImplementedError(f'source file extension {src_ext}')
+
+            tmp_file = os.path.join(tmp_dir, 'main' + src_ext)
+            tmp_file = shutil.copyfile(args.src_file, tmp_file)
+            tmp_path, _ = os.path.splitext(tmp_file)
+            compile_cmd_args = [
+                cc, '-g', '-O0', '-fno-inline-functions',
+                tmp_file,
+                '-o', tmp_path
+            ]
             if args.verbose:
-                print(f'Compile exited with code {proc.returncode}')
-            return (proc.returncode)
+                compile_cmd_args_str = " ".join(compile_cmd_args)
+                print(f'{compile_cmd_args_str=}')
+            proc = subprocess.Popen(
+                compile_cmd_args, cwd=tmp_dir, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, encoding='utf-8', env=compile_envs)
+            stdout = proc.communicate()[0]
+            if args.verbose:
+                print('proc.stdout:')
+                print(stdout)
+            if proc.returncode != 0:
+                if args.verbose:
+                    print(f'Compile exited with code {proc.returncode}')
+                return (proc.returncode)
+        else:
+            tmp_file = args.src_file
+            tmp_path, _ = os.path.splitext(tmp_file)
 
         # construct and run command
         trace_cmd_args = [
@@ -66,6 +72,9 @@ def main(args):
             '-ex', 'set logging on',
         ]
         trace_cmd_args += [
+            '-ex', 'set print elements unlimited',
+            '-ex', 'set print repeats unlimited',
+            '-ex', 'set max-value-size unlimited',
             '-ex', f'source {trace_script}',
             '-ex', r_cmd,
             '-ex', trace_asm_cmd,
@@ -94,7 +103,7 @@ def main(args):
             print(f'Trace exited with code {proc.returncode}')
         return (proc.returncode)
     finally:
-        if not args.keep_tmp:
+        if tmp_dir is not None and not args.keep_tmp:
             shutil.rmtree(tmp_dir)
 
 
@@ -109,6 +118,7 @@ if __name__ == '__main__':
     parser.add_argument("-v", "--verbose", action="store_true")
     parser.add_argument("--debug_mode", action="store_true")
     parser.add_argument("--keep_tmp", action="store_true")
+    parser.add_argument("--compile", action="store_true")
     parser.add_argument("--infer_output_files", action="store_true")
     parser.add_argument("--timeout", default=10, type=int)
     args = parser.parse_args()
