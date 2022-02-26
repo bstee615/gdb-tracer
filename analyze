@@ -66,6 +66,9 @@ def main(args):
             '-ex', 'set logging on',
         ]
         trace_cmd_args += [
+            '-ex', 'set print elements unlimited',
+            '-ex', 'set print repeats unlimited',
+            '-ex', 'set max-value-size unlimited',
             '-ex', f'source {trace_script}',
             '-ex', r_cmd,
             '-ex', trace_asm_cmd,
