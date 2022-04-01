@@ -17,7 +17,7 @@ def main(args):
     tmp_dir = None
 
     try:
-        if compile:
+        if args.compile:
             tmp_dir = tempfile.mkdtemp()
             # compile file
             _, src_ext = os.path.splitext(args.src_file)
@@ -52,6 +52,10 @@ def main(args):
         else:
             tmp_file = args.src_file
             tmp_path, _ = os.path.splitext(tmp_file)
+
+        if not os.path.exists(tmp_path):
+            print(f'Missing, must not have compiled: {tmp_path}')
+            return
 
         # construct and run command
         trace_cmd_args = [
@@ -145,6 +149,8 @@ if __name__ == '__main__':
             os.mkdir('outputs')
         if not os.path.exists('logs'):
             os.mkdir('logs')
+        if args.verbose:
+            print(f'{args.output_file=} {args.log_file=}')
 
     args.input_file = os.path.abspath(args.input_file)
     if args.output_file is not None:
