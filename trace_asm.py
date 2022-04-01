@@ -55,7 +55,7 @@ class TraceAsm(gdb.Command):
                 if symtab:
                     path = symtab.fullname()
                     line = sal.line
-                    is_main_exe = path is not None and (path.startswith('/workspace') or path.startswith('/tmp') or path.startswith('/scratch'))
+                    is_main_exe = path is not None and (path.startswith('/workspace') or path.startswith('/tmp') or path.startswith('/scratch') or path.startswith('/work'))
                     if is_main_exe:
                         f.write(f'<program_point filename="{path}" line="{line}">\n')
                         self.log_vars(frame, f)
@@ -82,8 +82,11 @@ class TraceAsm(gdb.Command):
         proxy = None
         value = str(symbol.value(frame))
         errored = False
+        #print('symbol type', symbol.type.name)
         if symbol.type.name is None:
             return proxy, value, errored
+        #if symbol.type.name == '':
+        #    proxy = 'array'
         if symbol.type.name == 'std::stringstream':
             proxy = symbol.type.name
             command = f'printf "\\"%s\\"", {symbol.name}.str().c_str()'
